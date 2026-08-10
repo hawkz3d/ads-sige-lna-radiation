@@ -1,0 +1,93 @@
+* ============================================================
+* SiGe HBT Cascode LNA — 0.7 GHz 中心频率
+* 来源：论文 第4章 "基于SiGe HBT的SiGe MMIC LNA 光子、重离子
+*       辐照损伤及电磁干扰协合效应研究"
+* 电路拓扑：偏置电路(带隙基准启动) + Cascode 放大级 + 输出匹配
+* 晶体管：0.18um SiGe BiCMOS 工艺库射频 NPN 管
+* ------------------------------------------------------------
+* 说明：
+*   - 晶体管 SPICE 模型参数以论文表4-3(辐照前后)为基准，通过
+*     .PARAM 切换 NOM / TID / DD 三种工况。
+*   - 匹配元件值(LB、L_OUT、C_COUP)为便于仿真选取的初值，
+*     需在实际工程中按目标指标重新优化。
+* ============================================================
+
+* === 电源 ===
+VCC  VCC   0    DC 3.3V
+VBIAS_CAS  CASB 0 DC 1.4V    ; 共基级栅极偏置
+
+* === 输入：AC 源 + 输入匹配 ===
+VIN   IN    0   DC 0V AC 1
+LB    IN    B   2.7nH        ; 基极串联匹配电感(初值)
+LE    E1    0   0.5nH        ; 发射极退化电感(稳定性, 初值)
+
+* === 偏置电路(带隙基准启动 -> 电流镜) ===
+* 论文 4.1.2: Q1 电流镜, Q2 提供地通路, Q3 基极补偿
+I_BIAS  BIAS  0    DC 50uA   ; 由 BandgapRef 输出的基准电流(简化)
+Q1     BIAS   BIAS  VCC  0  NPN_SIG    ; 二极管接法电流镜参考
+Q2     0      BIAS  VCC  0  NPN_SIG    ; 地通路
+Q3     B      B     VCC  0  NPN_SIG    ; 基极补偿
+RB_BIAS B      BIAS  5K
+
+* === Cascode 放大级 ===
+* 论文: Q6/Q7 为放大晶体管, Q5 提供 cascode 偏置
+Q6     X      B     E1   0  NPN_SIG    ; 共射级(输入级)
+Q7     OUT    CASB  X    0  NPN_SIG    ; 共基级(输出级)
+RC     VCC    OUT   0                   ; 集电极(经输出网络接电源)
+
+* === 输出匹配网络 ===
+* 论文 4.1.3: 输出端 LC 匹配网络, 共轭匹配到 50 欧
+L_DC   VCC    OUT   8nH                ; 射频扼流
+C_COUP OUT    OUTRF 3.3pF              ; 耦合电容
+L_OUT  OUTRF  LOAD  6nH                ; 输出匹配电感(初值)
+R_LOAD LOAD   0    50                  ; 50 欧负载
+
+* === EMI 注入点(论文 4.3.2) ===
+* 在放大级晶体管基极前加入 EMI 信号源, 见 EMI_IN 节点
+* (默认断开, 需协合效应仿真时接入):
+*   V_EMI EMI_IN 0 SIN(0 45mV 500MEG)   ; -15dBm @ 500MHz
+*   C_EMI B     EMI_IN 1nF
+
+* === SiGe HBT 模型(可参数化) ===
+* 基准参数来自论文表4-3 "辐照前参数值":
+*   BF=272.8  RB=15.3  CJE=26.9f  CJC=33.4f  TF=0.34p
+.model NPN_SIG NPN(
++  IS    = 1e-16
++  BF    = {BFN}
++  NF    = 1.05
++  RB    = {RBN}
++  RC    = 5
++  RE    = 1.2
++  CJE   = {CJEN}
++  CJC   = {CJCN}
++  TF    = {TFN}
++  VAF   = 80
++  VA    = 80
++  IKF   = 50m
++)
+
+* === 辐照工况(论文表4-3) ===
+* 工况0 NOM : 正常
+* 工况1 TID : 总剂量效应 (BF 降, RB 增, CJE/CJC 增, TF 降)
+* 工况2 DD  : 位移损伤   (BF 降, RB 增, CJE 降, CJC 增, TF 降)
+.param COND=NOM
++BFN = {COND=='NOM' ? 272.8 : COND=='TID' ? 229.1 : 233.0}
++RBN = {COND=='NOM' ? 15.3 : COND=='TID' ? 28.9 : 20.3}
++CJEN= {COND=='NOM' ? 26.9e-15 : COND=='TID' ? 32.1e-15 : 25.3e-15}
++CJCN= {COND=='NOM' ? 33.4e-15 : COND=='TID' ? 36.9e-15 : 35.1e-15}
++TFN = {COND=='NOM' ? 0.34e-12 : 0.31e-12}
+
+* === 分析 ===
+.AC DEC 50 0.1G 3G
+.OP
+.OPTIONS reltol=1e-4 vntol=1e-6
+.END
+
+* ==== 期望性能指标(论文表4-1) ====
+*   频率:        700 +/- 10 MHz
+*   输入反射:    S11 <= -5 dB
+*   输出反射:    S22 <= -10 dB
+*   噪声系数:    NF  <= 1.9 dB
+*   功率增益:    S21 >= 18 dB
+* 论文实测仿真: 中心频带 S21 ~ 18.5 dB, NF < 2 dB,
+*               最高增益 19.4 dB, 最小噪声系数 1.4 dB (共轭匹配下)

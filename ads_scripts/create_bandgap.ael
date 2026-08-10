@@ -1,0 +1,107 @@
+fputs(stderr, "=== Bandgap Reference (net-based) ===\n");
+
+decl lib = "MyLibrary_lib";
+decl cell = "BandgapRef";
+decl view = "schematic";
+
+if (de_cellview_exists(lib, cell, view)) {
+    de_delete_cellview(lib, cell, view);
+}
+
+decl ctx = de_create_new_schematic_view(lib, cell, view);
+de_bring_context_to_top_or_open_new_window(ctx);
+
+defun place(libName, cellName, x, y) {
+    decl info = de_create_iteminfo_for_new_instance(ctx, libName, cellName, "symbol");
+    return de_create_new_instance_from_iteminfo(info, x, y);
+}
+
+fputs(stderr, "Placing components...\n");
+
+// PNP BJTs: Q area 1x (left), Q area 8x (right)
+place("ads_rflib", "BJT_PNP", -1.0, -1.5);
+place("ads_rflib", "BJT_PNP",  1.5, -1.5);
+
+// Resistors
+place("ads_rflib", "R", -1.0,  0.0);
+place("ads_rflib", "R",  1.5,  0.0);
+place("ads_rflib", "R",  3.5,  0.5);
+place("ads_rflib", "R",  3.5, -1.0);
+
+// PMOS current mirror
+place("ads_rflib", "MOSFET_PMOS", -1.0,  1.0);
+place("ads_rflib", "MOSFET_PMOS",  1.5,  1.0);
+place("ads_rflib", "MOSFET_PMOS",  3.5,  1.5);
+
+// OpAmp
+place("ads_behavioral", "OpAmpIdeal", 0.25, 0.0);
+
+// VDD
+place("ads_sources", "V_DC", 0.25, 2.0);
+
+// GNDs
+place("ads_rflib", "GROUND", -1.0, -2.5);
+place("ads_rflib", "GROUND",  1.5, -2.5);
+place("ads_rflib", "GROUND",  3.5, -2.0);
+
+// Ports
+place("ads_rflib", "PIN", 3.5, -0.25);
+place("ads_rflib", "PIN", 0.25, 2.25);
+
+fputs(stderr, "Assigning nets...\n");
+
+// Instance names ADS auto-assigns:
+// BJT1, BJT2  (Q1, Q2)
+// R1, R2, R3, R4
+// MOSFET1, MOSFET2, MOSFET3  (M1, M2, M3)
+// AMP1 (OP1)
+// SRC1 (VDD)
+// P1, P2 (ports)
+
+// === Net definitions ===
+// VDD net: SRC1.P, M1.S, M2.S, M3.S, AMP1.V+
+de_modify_net_of_inst_pin("SRC1", "P", "VDD");
+de_modify_net_of_inst_pin("MOSFET1", "S", "VDD");
+de_modify_net_of_inst_pin("MOSFET2", "S", "VDD");
+de_modify_net_of_inst_pin("MOSFET3", "S", "VDD");
+de_modify_net_of_inst_pin("AMP1", "V+", "VDD");
+de_modify_net_of_inst_pin("P2", "P", "VDD");
+
+// GND net: SRC1.N, Q1.C, Q1.B, Q2.C, Q2.B, R4.n, AMP1.V-
+de_modify_net_of_inst_pin("SRC1", "N", "GND");
+de_modify_net_of_inst_pin("BJT1", "C", "GND");
+de_modify_net_of_inst_pin("BJT1", "B", "GND");
+de_modify_net_of_inst_pin("BJT2", "C", "GND");
+de_modify_net_of_inst_pin("BJT2", "B", "GND");
+de_modify_net_of_inst_pin("R4", "n", "GND");
+de_modify_net_of_inst_pin("AMP1", "V-", "GND");
+
+// LEFT branch (M1.D -> R1.p -> R1.n -> Q1.E)
+de_modify_net_of_inst_pin("MOSFET1", "D", "NET_LEFT");
+de_modify_net_of_inst_pin("R1", "p", "NET_LEFT");
+de_modify_net_of_inst_pin("R1", "n", "NET_SENSE_P");
+de_modify_net_of_inst_pin("BJT1", "E", "NET_SENSE_P");
+de_modify_net_of_inst_pin("AMP1", "IN+", "NET_SENSE_P");
+
+// RIGHT branch (M2.D -> R2.p -> R2.n -> Q2.E)
+de_modify_net_of_inst_pin("MOSFET2", "D", "NET_RIGHT");
+de_modify_net_of_inst_pin("R2", "p", "NET_RIGHT");
+de_modify_net_of_inst_pin("R2", "n", "NET_SENSE_N");
+de_modify_net_of_inst_pin("BJT2", "E", "NET_SENSE_N");
+de_modify_net_of_inst_pin("AMP1", "IN-", "NET_SENSE_N");
+
+// OUTPUT branch (M3.D -> R3.p -> R3.n=VREF <- R4.p)
+de_modify_net_of_inst_pin("MOSFET3", "D", "NET_OUT");
+de_modify_net_of_inst_pin("R3", "p", "NET_OUT");
+de_modify_net_of_inst_pin("R3", "n", "VREF");
+de_modify_net_of_inst_pin("R4", "p", "VREF");
+de_modify_net_of_inst_pin("P1", "P", "VREF");
+
+// GATE net (AMP1.OUT -> M1.G, M2.G, M3.G)
+de_modify_net_of_inst_pin("AMP1", "OUT", "GATE");
+de_modify_net_of_inst_pin("MOSFET1", "G", "GATE");
+de_modify_net_of_inst_pin("MOSFET2", "G", "GATE");
+de_modify_net_of_inst_pin("MOSFET3", "G", "GATE");
+
+db_save_design_without_prompting(ctx);
+fputs(stderr, "Done! BandgapRef created with net connections.\n");

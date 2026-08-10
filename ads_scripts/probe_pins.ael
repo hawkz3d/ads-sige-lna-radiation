@@ -1,0 +1,41 @@
+fputs(stderr, "=== Dump Pin Coordinates ===\n");
+
+decl ctx = de_find_design_context_from_name("MyLibrary_lib:ProbePin:schematic");
+if (ctx) {
+    de_bring_context_to_top_or_open_new_window(ctx);
+
+    defun dump_pins(instName) {
+        fputs(stderr, "\n--- ");
+        fputs(stderr, instName);
+        fputs(stderr, " ---\n");
+
+        decl inst = db_find_instance_ex(ctx, instName);
+        if (inst) {
+            decl iter = db_create_inst_pin_iter(inst);
+            for (; db_inst_pin_iter_is_valid(iter); iter = db_inst_pin_iter_get_next(iter)) {
+                decl snap = db_get_inst_pin_snap_point(iter);
+                if (snap) {
+                    decl sx = db_get_x(snap);
+                    decl sy = db_get_y(snap);
+                    fputs(stderr, "pin(");
+                    fputs(stderr, sx);
+                    fputs(stderr, ",");
+                    fputs(stderr, sy);
+                    fputs(stderr, ")\n");
+                }
+            }
+        } else {
+            fputs(stderr, "NOT FOUND\n");
+        }
+    }
+
+    dump_pins("R1");
+    dump_pins("BJT1");
+    dump_pins("MOSFET1");
+    dump_pins("AMP1");
+    dump_pins("SRC1");
+
+    fputs(stderr, "\nDone!\n");
+} else {
+    fputs(stderr, "ERROR: ProbePin not found. Run probe creator first.\n");
+}

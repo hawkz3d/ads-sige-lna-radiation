@@ -1,0 +1,34 @@
+* Bandgap Reference Circuit - Kuijk CMOS
+* SPICE netlist for ADS import
+
+* === Power Supply ===
+VDD VDD 0 DC 5V
+
+* === Ideal Op-Amp (VCVS, gain=100000) ===
+E_OP GATE 0 NEG POS 1E5
+
+* === PMOS Current Mirror ===
+M1 D1 GATE VDD VDD MODPMOS W=10U L=1U
+M2 D2 GATE VDD VDD MODPMOS W=10U L=1U
+M3 VREF GATE VDD VDD MODPMOS W=10U L=1U
+
+* === PNP BJTs (area ratio 1:8) ===
+Q1 0 0 POS GND MODPNP 1.0
+Q2 0 0 NEG GND MODPNP 8.0
+
+* === Resistors ===
+R1 VDD D1 10K
+R2 VDD D2 10K
+R3 VREF 0 5K
+
+* === Startup ===
+I_START GATE 0 DC 1UA
+
+* === Models ===
+.MODEL MODPMOS PMOS (KP=50U VTO=-0.7 LAMBDA=0.05)
+.MODEL MODPNP PNP (BF=100 IS=1E-16)
+
+* === Analysis ===
+.OP
+.TEMP 27
+.END
